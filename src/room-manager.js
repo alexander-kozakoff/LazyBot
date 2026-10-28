@@ -32,6 +32,7 @@ export class RoomManager {
     Object.assign(this, { adapter, logger, now, setTimer, clearTimer, emptyDelayMs, retryMs });
     this.emptySince = new Map();
     this.pending = false;
+    this.refreshPending = false;
     this.running = null;
     this.stopped = false;
     this.suspended = false;
@@ -44,13 +45,14 @@ export class RoomManager {
   voiceChanged(oldChannelId, newChannelId) {
     if (oldChannelId === newChannelId) return this.running ?? Promise.resolve();
     if (newChannelId) this.emptySince.delete(newChannelId);
-    if (oldChannelId) this.emptySince.delete(oldChannelId);
+    if (oldChannelId) this.emptySince.set(oldChannelId, this.now());
     return this.request();
   }
 
-  request() {
+  request({ refresh = false } = {}) {
     if (this.stopped || this.suspended) return Promise.resolve();
     this.pending = true;
+    this.refreshPending = this.refreshPending || refresh;
     if (!this.running) {
       this.running = this.drain().finally(() => {
         this.running = null;
@@ -68,9 +70,12 @@ export class RoomManager {
         return;
       }
       try {
-        await this.reconcile();
+        const refresh = this.refreshPending;
+        this.refreshPending = false;
+        await this.reconcile({ refresh });
       } catch (error) {
         this.emptySince.clear();
+        this.refreshPending = true;
         this.retryAfter = this.now() + this.retryMs;
         this.logger.warn(explainError(error));
         this.schedule(this.retryMs);
@@ -100,12 +105,12 @@ export class RoomManager {
     }
   }
 
-  async reconcile() {
+  async reconcile({ refresh = false } = {}) {
     if (this.timer !== null) {
       this.clearTimer(this.timer);
       this.timer = null;
     }
-    let rooms = await this.adapter.listRooms();
+    let rooms = await this.adapter.listRooms({ refresh });
     if (this.stopped || this.suspended) return;
     this.observe(rooms);
     const empty = rooms.filter(room => room.members === 0).sort(compareRooms);
@@ -163,7 +168,7 @@ export class RoomManager {
     this.emptySince.clear();
     this.suspended = false;
     this.retryAfter = 0;
-    return this.request();
+    return this.request({ refresh: true });
   }
 
   stop() {

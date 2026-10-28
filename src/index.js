@@ -60,7 +60,7 @@ async function main() {
   const interval = setInterval(() => {
     if (!client.isReady()) return;
     if (manager.suspended) void manager.resume();
-    else void manager.request();
+    else void manager.request({ refresh: true });
   }, RECONCILE_INTERVAL_MS);
   let stopping = false;
   async function shutdown() {

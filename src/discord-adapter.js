@@ -27,11 +27,13 @@ export function createDiscordAdapter(client, { guildId, categoryId }) {
     // VoiceState cache содержит и людей, и ботов; GuildMembers intent не нужен.
     return !guild.voiceStates.cache.some(state => state.channelId === channelId);
   }
-  async function checkedCategory() {
+  async function checkedCategory({ refresh = false } = {}) {
     if (!client.isReady()) throw configurationError('Соединение с Discord восстанавливается. Управление каналами приостановлено.');
     guild = client.guilds.cache.get(guildId);
     if (!guild?.available) throw configurationError('Сервер недоступен. Проверьте ID сервера и добавление LazyBot на сервер.');
-    const channels = await guild.channels.fetch();
+    const channels = refresh
+      ? await guild.channels.fetch()
+      : guild.channels.cache;
     if (!client.isReady() || !guild.available) throw configurationError('Соединение с Discord восстанавливается. Управление каналами приостановлено.');
     const category = channels.get(categoryId);
     if (category?.type !== ChannelType.GuildCategory) {
@@ -52,8 +54,8 @@ export function createDiscordAdapter(client, { guildId, categoryId }) {
     return { category, channels };
   }
   return {
-    async listRooms() {
-      const { channels } = await checkedCategory();
+    async listRooms(options = {}) {
+      const { channels } = await checkedCategory(options);
       return [...channels.values()].filter(isManaged).map(channel => ({
         id: channel.id,
         name: channel.name,

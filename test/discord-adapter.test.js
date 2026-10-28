@@ -139,20 +139,22 @@ test('при потере соединения удаления прекраща
   await assert.rejects(f.adapter.listRooms(), /Соединение/);
 });
 
-test('потеря соединения во время HTTP-запроса не позволяет создать комнату', async () => {
+test('потеря соединения во время полной сверки останавливает проверку', async () => {
   const f = fixture();
   f.guild.channels.fetch = async () => {
     f.client.isReady = () => false;
     return f.cache.clone();
   };
-  await assert.rejects(f.adapter.createRoom('Комната 1'), /Соединение/);
-  assert.deepEqual(f.created, []);
+  await assert.rejects(
+    f.adapter.listRooms({ refresh: true }),
+    /Соединение/
+  );assert.deepEqual(f.created, []);
 });
 
 test('отсутствующие в HTTP-ответе каналы не берутся из старого кэша', async () => {
   const f = fixture();
   f.add('stale');
   f.guild.channels.fetch = async () => new Collection([[f.categoryId, f.cache.get(f.categoryId)]]);
-  assert.deepEqual(await f.adapter.listRooms(), []);
+  assert.deepEqual(await f.adapter.listRooms({ refresh: true }), []);
   assert.equal(await f.adapter.deleteRoom('stale'), false);
 });
