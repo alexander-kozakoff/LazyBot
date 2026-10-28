@@ -1,0 +1,16 @@
+{
+  "name": "lazybot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LazyBot — один свободный голосовой канал в Discord",
+  "type": "module",
+  "engines": { "node": ">=24.17.0" },
+  "scripts": {
+    "start": "node src/index.js",
+    "setup": "node scripts/setup.js",
+    "check": "node scripts/check.js",
+    "test": "node --test",
+    "verify": "npm run check && npm test"
+  },
+  "dependencies": { "discord.js": "14.27.0" }
+}
