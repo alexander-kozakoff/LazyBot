@@ -23,12 +23,12 @@ async function main() {
     rest: { timeout: 15_000, retries: 2 },
   });
   const manager = new RoomManager(createDiscordAdapter(client, config), logger);
-  client.once(Events.ClientReady, () => {
+  client.on(Events.ClientReady, () => {
     logger.info('LazyBot подключён. Поддерживаю одну свободную комнату в указанной категории.');
-    void manager.request();
+    void manager.resume();
   });
   client.on(Events.VoiceStateUpdate, (oldState, newState) => {
-    if (newState.guild.id !== config.guildId || oldState.channelId === newState.channelId) return;
+    if (!client.isReady() || newState.guild.id !== config.guildId || oldState.channelId === newState.channelId) return;
     const relevant = [oldState.channelId, newState.channelId].some(id =>
       id && (manager.emptySince.has(id) || newState.guild.channels.cache.get(id)?.parentId === config.categoryId));
     if (relevant) void manager.voiceChanged(oldState.channelId, newState.channelId);
@@ -36,7 +36,7 @@ async function main() {
   for (const event of [Events.ChannelCreate, Events.ChannelDelete, Events.ChannelUpdate]) {
     client.on(event, (channel, updatedChannel) => {
       const updated = updatedChannel ?? channel;
-      if (updated.guild?.id !== config.guildId) return;
+      if (!client.isReady() || updated.guild?.id !== config.guildId) return;
       if ([channel.id, updated.id].includes(config.categoryId)
         || channel.parentId === config.categoryId || updated.parentId === config.categoryId) {
         void manager.request();
@@ -47,15 +47,21 @@ async function main() {
     manager.pause();
     logger.warn('Связь с Discord потеряна. Ожидаю переподключения.');
   });
-  client.on(Events.ShardResume, () => { manager.pause(); void manager.request(); });
-  client.on(Events.ShardReady, () => { manager.pause(); void manager.request(); });
-  client.on(Events.GuildAvailable, guild => { if (guild.id === config.guildId) void manager.request(); });
+  client.on(Events.ShardResume, () => { if (client.isReady()) void manager.resume(); });
+  client.on(Events.ShardReady, () => { if (client.isReady()) void manager.resume(); });
+  client.on(Events.GuildAvailable, guild => {
+    if (client.isReady() && guild.id === config.guildId) void manager.resume();
+  });
   client.on(Events.GuildUnavailable, guild => { if (guild.id === config.guildId) manager.pause(); });
   client.on(Events.Error, () => logger.warn('Ошибка соединения с Discord. Проверьте интернет; бот попробует восстановить связь.'));
   client.on(Events.ShardError, () => logger.warn('Соединение с Discord временно недоступно. Ожидаю восстановления.'));
   client.on(Events.Warn, () => logger.warn('Discord сообщил о временной проблеме соединения.'));
 
-  const interval = setInterval(() => { void manager.request(); }, RECONCILE_INTERVAL_MS);
+  const interval = setInterval(() => {
+    if (!client.isReady()) return;
+    if (manager.suspended) void manager.resume();
+    else void manager.request();
+  }, RECONCILE_INTERVAL_MS);
   let stopping = false;
   async function shutdown() {
     if (stopping) return;

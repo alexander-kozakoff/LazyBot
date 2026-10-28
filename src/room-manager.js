@@ -34,6 +34,7 @@ export class RoomManager {
     this.pending = false;
     this.running = null;
     this.stopped = false;
+    this.suspended = false;
     this.retryAfter = 0;
     this.timer = null;
   }
@@ -48,7 +49,7 @@ export class RoomManager {
   }
 
   request() {
-    if (this.stopped) return Promise.resolve();
+    if (this.stopped || this.suspended) return Promise.resolve();
     this.pending = true;
     if (!this.running) {
       this.running = this.drain().finally(() => {
@@ -60,7 +61,7 @@ export class RoomManager {
   }
 
   async drain() {
-    while (this.pending && !this.stopped) {
+    while (this.pending && !this.stopped && !this.suspended) {
       this.pending = false;
       if (this.now() < this.retryAfter) {
         this.schedule(this.retryAfter - this.now());
@@ -79,7 +80,7 @@ export class RoomManager {
   }
 
   schedule(delay) {
-    if (this.stopped) return;
+    if (this.stopped || this.suspended) return;
     if (this.timer !== null) this.clearTimer(this.timer);
     this.timer = this.setTimer(() => {
       this.timer = null;
@@ -105,7 +106,7 @@ export class RoomManager {
       this.timer = null;
     }
     let rooms = await this.adapter.listRooms();
-    if (this.stopped) return;
+    if (this.stopped || this.suspended) return;
     this.observe(rooms);
     const empty = rooms.filter(room => room.members === 0).sort(compareRooms);
     if (empty.length === 0) {
@@ -119,7 +120,7 @@ export class RoomManager {
     // заново читаем каналы и актуальные голосовые состояния из Gateway.
     for (const candidate of empty.slice(1)) {
       rooms = await this.adapter.listRooms();
-      if (this.stopped) return;
+      if (this.stopped || this.suspended) return;
       this.observe(rooms);
       const currentEmpty = rooms.filter(room => room.members === 0).sort(compareRooms);
       const room = currentEmpty.find(item => item.id === candidate.id);
@@ -137,7 +138,7 @@ export class RoomManager {
     }
 
     rooms = await this.adapter.listRooms();
-    if (this.stopped) return;
+    if (this.stopped || this.suspended) return;
     this.observe(rooms);
     const remainingEmpty = rooms.filter(room => room.members === 0).sort(compareRooms);
     if (remainingEmpty.length === 0) {
@@ -151,7 +152,18 @@ export class RoomManager {
 
   pause() {
     // При разрыве соединения не доверяем прежним данным о пустоте.
+    this.suspended = true;
+    this.pending = false;
     this.emptySince.clear();
+    if (this.timer !== null) this.clearTimer(this.timer);
+    this.timer = null;
+  }
+
+  resume() {
+    this.emptySince.clear();
+    this.suspended = false;
+    this.retryAfter = 0;
+    return this.request();
   }
 
   stop() {

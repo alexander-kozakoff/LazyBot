@@ -24,11 +24,13 @@ export function createDiscordAdapter(client, { guildId, categoryId }) {
     guild = client.guilds.cache.get(guildId);
     if (!guild?.available) throw configurationError('Сервер недоступен. Проверьте ID сервера и добавление LazyBot на сервер.');
     const channels = await guild.channels.fetch();
+    if (!client.isReady() || !guild.available) throw configurationError('Соединение с Discord восстанавливается. Управление каналами приостановлено.');
     const category = channels.get(categoryId);
     if (category?.type !== ChannelType.GuildCategory) {
       throw configurationError('Категория не найдена. Укажите ID категории «Голосовые комнаты» в DISCORD_CATEGORY_ID.');
     }
     const me = guild.members.me ?? await guild.members.fetchMe();
+    if (!client.isReady() || !guild.available) throw configurationError('Соединение с Discord восстанавливается. Управление каналами приостановлено.');
     const required = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ManageChannels];
     if (!category.permissionsFor(me)?.has(required)) {
       throw configurationError('Разрешите LazyBot просмотр и управление каналами в категории «Голосовые комнаты».');

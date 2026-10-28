@@ -145,7 +145,7 @@ test('после потери связи старое время пустоты 
   await f.manager.request();
   await f.tick(4_000);
   f.manager.pause();
-  await f.manager.request();
+  await f.manager.resume();
   await f.tick(4_999);
   assert.deepEqual(f.operations, []);
   await f.tick(1);
@@ -195,6 +195,19 @@ test('остановка отменяет таймер удаления', async 
   await f.manager.request();
   assert.equal(f.timers.size, 0);
   assert.deepEqual(f.operations, []);
+});
+
+test('во время разрыва связи периодические сверки и таймеры не меняют комнаты', async () => {
+  const f = fixture([room(1), room(2)]);
+  await f.manager.request();
+  f.manager.pause();
+  await f.manager.request();
+  await f.tick(60_000);
+  assert.equal(f.timers.size, 0);
+  assert.deepEqual(f.operations, []);
+  await f.manager.resume();
+  await f.tick(5_000);
+  assert.deepEqual(f.operations, [['delete', '2']]);
 });
 
 test('остановка во время чтения каналов не создаёт комнату', async () => {
