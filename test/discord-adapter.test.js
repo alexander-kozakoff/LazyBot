@@ -158,3 +158,29 @@ test('отсутствующие в HTTP-ответе каналы не беру
   assert.deepEqual(await f.adapter.listRooms({ refresh: true }), []);
   assert.equal(await f.adapter.deleteRoom('stale'), false);
 });
+test('постоянная комната сохраняется и не мешает созданию свободной', async () => {
+  const f = fixture();
+  f.guild.members.me.roles = { botRole: { id: 'bot-role' } };
+
+  const permanent = f.add('permanent');
+  await f.adapter.listRooms();
+
+  permanent.permissionOverwrites = {
+    cache: new Collection([
+      ['bot-role', {
+        deny: {
+          has: permission => permission === PermissionFlagsBits.ManageChannels,
+        },
+      }],
+    ]),
+  };
+
+  permanent.permissionsFor = () => ({ has: () => false });
+
+  assert.equal(await f.adapter.deleteRoom(permanent.id), false);
+  assert.deepEqual(await f.adapter.listRooms(), []);
+
+  await f.adapter.createRoom('Комната 1');
+  assert.equal(f.created.length, 1);
+  assert.deepEqual(f.deleted, []);
+});

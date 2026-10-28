@@ -18,10 +18,17 @@ export function createDiscordAdapter(client, { guildId, categoryId }) {
   let guild;
   let visibleRoomIds = new Set();
   function isManaged(channel) {
+    const botRoleId = guild?.members.me?.roles?.botRole?.id;
+    const botOverwrite = channel?.permissionOverwrites?.cache.get(botRoleId);
+    const excluded = botOverwrite?.deny.has(
+      PermissionFlagsBits.ManageChannels
+    ) ?? false;
+
     return channel?.type === ChannelType.GuildVoice
       && channel.guild.id === guildId
       && channel.parentId === categoryId
-      && channel.id !== guild?.afkChannelId;
+      && channel.id !== guild?.afkChannelId
+      && !excluded;
   }
   function isEmpty(channelId) {
     // VoiceState cache содержит и людей, и ботов; GuildMembers intent не нужен.
