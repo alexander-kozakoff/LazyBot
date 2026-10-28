@@ -1,5 +1,13 @@
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 
+// Discord не разрешает управление голосовым каналом, если запрещён Connect,
+// даже когда ManageChannels присутствует в вычисленной битовой маске.
+const requiredPermissions = [
+  PermissionFlagsBits.ViewChannel,
+  PermissionFlagsBits.ManageChannels,
+  PermissionFlagsBits.Connect,
+];
+
 function configurationError(message) {
   const error = new Error(message);
   error.name = 'ConfigurationError';
@@ -27,18 +35,17 @@ export function createDiscordAdapter(client, { guildId, categoryId }) {
     if (!client.isReady() || !guild.available) throw configurationError('Соединение с Discord восстанавливается. Управление каналами приостановлено.');
     const category = channels.get(categoryId);
     if (category?.type !== ChannelType.GuildCategory) {
-      throw configurationError('Категория не найдена. Укажите ID категории «Голосовые комнаты» в DISCORD_CATEGORY_ID.');
+      throw configurationError('Категория не найдена. Укажите ID выбранной категории в DISCORD_CATEGORY_ID.');
     }
     const me = guild.members.me ?? await guild.members.fetchMe();
     if (!client.isReady() || !guild.available) throw configurationError('Соединение с Discord восстанавливается. Управление каналами приостановлено.');
-    const required = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ManageChannels];
-    if (!category.permissionsFor(me)?.has(required)) {
-      throw configurationError('Разрешите LazyBot просмотр и управление каналами в категории «Голосовые комнаты».');
+    if (!category.permissionsFor(me)?.has(requiredPermissions)) {
+      throw configurationError('Разрешите LazyBot «Просматривать каналы», «Управлять каналами» и «Подключаться» в выбранной категории. Discord требует «Подключаться» для удаления голосовых комнат; бот сам к разговору не присоединяется.');
     }
     // Без видимости всех комнат нельзя правильно посчитать свободные каналы.
     for (const channel of channels.values()) {
-      if (isManaged(channel) && !channel.permissionsFor(me)?.has(required)) {
-        throw configurationError('В голосовых комнатах различаются права бота. Синхронизируйте права комнат с категорией.');
+      if (isManaged(channel) && !channel.permissionsFor(me)?.has(requiredPermissions)) {
+        throw configurationError('В голосовых комнатах не хватает прав бота. Синхронизируйте права комнат с категорией: нужны просмотр, управление каналами и «Подключаться».');
       }
     }
     visibleRoomIds = new Set([...channels.values()].filter(isManaged).map(channel => channel.id));
@@ -66,8 +73,11 @@ export function createDiscordAdapter(client, { guildId, categoryId }) {
       return true;
     },
     isRoomEmpty(channelId) {
+      const channel = guild?.channels.cache.get(channelId);
       return client.isReady() && guild?.available && visibleRoomIds.has(channelId)
-        && isManaged(guild.channels.cache.get(channelId)) && isEmpty(channelId);
+        && isManaged(channel)
+        && channel.permissionsFor(guild.members.me)?.has(requiredPermissions)
+        && isEmpty(channelId);
     },
     async deleteRoom(channelId) {
       // Повторная синхронная проверка перед непосредственным DELETE.

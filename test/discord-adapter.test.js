@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ChannelType, Collection } from 'discord.js';
+import { ChannelType, Collection, PermissionFlagsBits } from 'discord.js';
 import { createDiscordAdapter } from '../src/discord-adapter.js';
 
 function fixture() {
@@ -83,6 +83,37 @@ test('рассинхронизированные права комнат обн�
   const f = fixture();
   f.add('voice').permissionsFor = () => ({ has: () => false });
   await assert.rejects(f.adapter.listRooms(), /Синхронизируйте/);
+});
+
+function denyConnect(channel) {
+  channel.permissionsFor = () => ({
+    has: permissions => !(Array.isArray(permissions) ? permissions : [permissions])
+      .includes(PermissionFlagsBits.Connect),
+  });
+}
+
+test('запрет Connect в приватной категории обнаруживается при наличии ViewChannel и ManageChannels', async () => {
+  const f = fixture();
+  denyConnect(f.cache.get(f.categoryId));
+  await assert.rejects(f.adapter.listRooms(), /Подключаться/);
+  await assert.rejects(f.adapter.createRoom('Комната 1'), /Подключаться/);
+  assert.deepEqual(f.created, []);
+});
+
+test('запрет Connect в отдельной комнате останавливает управление до синхронизации прав', async () => {
+  const f = fixture();
+  denyConnect(f.add('private'));
+  await assert.rejects(f.adapter.listRooms(), /Подключаться/);
+  assert.deepEqual(f.deleted, []);
+});
+
+test('если Connect запретили после сверки, DELETE не отправляется', async () => {
+  const f = fixture();
+  const channel = f.add('private');
+  await f.adapter.listRooms();
+  denyConnect(channel);
+  assert.equal(await f.adapter.deleteRoom('private'), false);
+  assert.deepEqual(f.deleted, []);
 });
 
 test('адаптер не удаляет занятые, перенесённые и посторонние каналы', async () => {
