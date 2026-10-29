@@ -12,9 +12,15 @@ export function readConfig(env = process.env) {
       throw new Error(`Заполните ${key} в файле .env: нужен числовой ID из Discord.`);
     }
   }
+  const communityEnabled = env.COMMUNITY_ENABLED?.trim().toLowerCase() || 'false';
+  if (!['true', 'false'].includes(communityEnabled)) {
+    throw new Error('COMMUNITY_ENABLED должен быть true или false.');
+  }
   return {
     token,
     guildId: env.DISCORD_GUILD_ID.trim(),
     categoryId: env.DISCORD_CATEGORY_ID.trim(),
+    communityEnabled: communityEnabled === 'true',
+    databasePath: env.COMMUNITY_DATABASE_PATH?.trim() || 'data/lazybot.sqlite',
   };
 }

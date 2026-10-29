@@ -11,12 +11,16 @@ const valid = {
 
 test('настройки читаются без потери точности ID', () => {
   assert.equal(readConfig(valid).guildId, valid.DISCORD_GUILD_ID);
+  assert.equal(readConfig(valid).communityEnabled, false);
+  assert.equal(readConfig({ ...valid, COMMUNITY_ENABLED: ' true ' }).communityEnabled, true);
+  assert.equal(readConfig(valid).databasePath, 'data/lazybot.sqlite');
 });
 
 test('пустой токен и некорректный ID дают понятные сообщения', () => {
   assert.throws(() => readConfig({ ...valid, DISCORD_TOKEN: '' }), /DISCORD_TOKEN/);
   assert.throws(() => readConfig({ ...valid, DISCORD_GUILD_ID: 'сервер' }), /DISCORD_GUILD_ID/);
   assert.throws(() => readConfig({ ...valid, DISCORD_CATEGORY_ID: '' }), /DISCORD_CATEGORY_ID/);
+  assert.throws(() => readConfig({ ...valid, COMMUNITY_ENABLED: 'yes' }), /COMMUNITY_ENABLED/);
 });
 
 test('сообщения об ошибках Discord не содержат исходный секрет', () => {

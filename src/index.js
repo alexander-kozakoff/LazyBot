@@ -18,11 +18,24 @@ async function main() {
   catch (error) { logger.warn(error.message); process.exitCode = 1; return; }
 
   const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+    intents: [
+      GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates,
+      ...(config.communityEnabled ? [GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildInvites] : []),
+    ],
     // Не ждём HTTP-запрос бесконечно при потере сети.
     rest: { timeout: 15_000, retries: 2 },
   });
   const manager = new RoomManager(createDiscordAdapter(client, config), logger);
+  let community;
+  if (config.communityEnabled) {
+    try {
+      const { CommunityService } = await import('./community.js');
+      community = new CommunityService(client, config, logger);
+      community.install();
+    } catch {
+      logger.warn('Модуль сообщества не запущен: проверьте Node.js 24.17+, путь COMMUNITY_DATABASE_PATH и права записи. Голосовые комнаты продолжают работать.');
+    }
+  }
   client.on(Events.ClientReady, () => {
     logger.info('LazyBot подключён. Поддерживаю одну свободную комнату в указанной категории.');
     void manager.resume();
@@ -68,6 +81,7 @@ async function main() {
     stopping = true;
     clearInterval(interval);
     manager.stop();
+    await community?.stop();
     await client.destroy();
     logger.info('LazyBot остановлен. Голосовые комнаты остаются на сервере.');
   }
@@ -76,7 +90,7 @@ async function main() {
   try {
     await client.login(config.token);
   } catch {
-    logger.warn('Не удалось запустить LazyBot. Проверьте токен в .env, интернет и настройки приложения Discord.');
+    logger.warn('Не удалось запустить LazyBot. Проверьте токен, интернет и настройки Discord. Если COMMUNITY_ENABLED=true, включите Server Members Intent на странице Bot в Developer Portal.');
     await shutdown();
     process.exitCode = 1;
   }
